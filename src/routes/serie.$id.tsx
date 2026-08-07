@@ -16,6 +16,7 @@ import { getSeries } from "@/lib/tmdb.functions";
 import {
   applyEpisodeCount,
   epKey,
+  getLibrary,
   removeShow,
   setSeasonWatched,
   setStatus,
@@ -62,8 +63,12 @@ function SeriePage() {
   });
 
   useEffect(() => {
-    if (data && tracked) applyEpisodeCount(showId, data.totalEpisodes);
-  }, [data, showId, tracked]);
+    if (!data) return;
+    const current = getLibrary().find((s) => s.id === showId);
+    if (current && current.totalEpisodes !== data.totalEpisodes) {
+      applyEpisodeCount(showId, data.totalEpisodes);
+    }
+  }, [data, showId]);
 
   const watched = new Set(tracked?.watched ?? []);
   const total = data?.totalEpisodes ?? tracked?.totalEpisodes ?? 0;
