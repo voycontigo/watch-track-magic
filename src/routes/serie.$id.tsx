@@ -102,9 +102,24 @@ function SeriePage() {
     }
   }, [data, showId]);
 
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    targetKey: string;
+    targetLabel: string;
+    missingCount: number;
+    missingKeys: string[];
+  }>({
+    open: false,
+    targetKey: "",
+    targetLabel: "",
+    missingCount: 0,
+    missingKeys: [],
+  });
+
   const watched = new Set(tracked?.watched ?? []);
   const total = data?.totalEpisodes ?? tracked?.totalEpisodes ?? 0;
   const pct = total > 0 ? Math.round((watched.size / total) * 100) : 0;
+
 
   return (
     <main className="min-h-screen app-glow pb-24">
