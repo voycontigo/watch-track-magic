@@ -63,16 +63,23 @@ function Index() {
     if (shows.length === 0) return;
     let cancelled = false;
     (async () => {
+      const reopened: string[] = [];
       for (const show of shows) {
         try {
           const res = await checkCount({ data: { id: show.id } });
           if (cancelled) return;
-          applyEpisodeCount(show.id, res.totalEpisodes);
+          if (applyEpisodeCount(show.id, res.totalEpisodes)) reopened.push(show.name);
         } catch {
           /* ignora fallos puntuales */
         }
       }
-      if (!cancelled) markDailyCheckDone();
+      if (cancelled) return;
+      markDailyCheckDone();
+      if (reopened.length > 0) {
+        toast.info(
+          `${reopened.join(", ")} ${reopened.length === 1 ? "tiene" : "tienen"} capítulos nuevos: ${reopened.length === 1 ? "vuelve" : "vuelven"} a “Viendo”.`,
+        );
+      }
     })();
     return () => {
       cancelled = true;
