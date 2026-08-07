@@ -16,6 +16,7 @@ import { getSeries } from "@/lib/tmdb.functions";
 import {
   applyEpisodeCount,
   epKey,
+  getLibrary,
   removeShow,
   setSeasonWatched,
   setStatus,
