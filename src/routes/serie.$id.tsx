@@ -251,8 +251,13 @@ function SeriePage() {
                               <label className="flex items-center gap-3 rounded-lg px-2 py-2 active:bg-secondary">
                                 <Checkbox
                                   checked={watched.has(key)}
-                                  onCheckedChange={() => {
-                                    if (!tracked)
+                                  onCheckedChange={(nextChecked) => {
+                                    const checked = nextChecked === true;
+                                    if (!checked) {
+                                      toggleEpisode(showId, key, data.totalEpisodes);
+                                      return;
+                                    }
+                                    if (!tracked) {
                                       upsertShow({
                                         id: data.id,
                                         name: data.name,
@@ -261,7 +266,24 @@ function SeriePage() {
                                         status: "watching",
                                         totalEpisodes: data.totalEpisodes,
                                       });
-                                    toggleEpisode(showId, key, data.totalEpisodes);
+                                    }
+                                    const missingKeys = getPreviousEpisodeKeys(
+                                      data.seasons,
+                                      season.seasonNumber,
+                                      ep.episodeNumber,
+                                      watched,
+                                    );
+                                    if (missingKeys.length > 0) {
+                                      setConfirmDialog({
+                                        open: true,
+                                        targetKey: key,
+                                        targetLabel: `${season.seasonNumber}x${String(ep.episodeNumber).padStart(2, "0")} ${ep.name}`,
+                                        missingCount: missingKeys.length,
+                                        missingKeys,
+                                      });
+                                    } else {
+                                      toggleEpisode(showId, key, data.totalEpisodes);
+                                    }
                                   }}
                                 />
                                 <span className="min-w-0 flex-1 text-sm">
