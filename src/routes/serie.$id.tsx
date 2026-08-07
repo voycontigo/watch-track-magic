@@ -302,7 +302,47 @@ function SeriePage() {
                 );
               })}
             </Accordion>
+
+            <AlertDialog
+              open={confirmDialog.open}
+              onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Marcar capítulos anteriores?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Vas a marcar <strong>{confirmDialog.targetLabel}</strong> como visto. Hay{" "}
+                    {confirmDialog.missingCount} capítulo(s) anterior(es) sin marcar. ¿Quieres
+                    marcarlos también?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel
+                    onClick={() => {
+                      setConfirmDialog((prev) => ({ ...prev, open: false }));
+                      toggleEpisode(showId, confirmDialog.targetKey, data.totalEpisodes);
+                    }}
+                  >
+                    No, solo este
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      setConfirmDialog((prev) => ({ ...prev, open: false }));
+                      setSeasonWatched(
+                        showId,
+                        [confirmDialog.targetKey, ...confirmDialog.missingKeys],
+                        true,
+                        data.totalEpisodes,
+                      );
+                    }}
+                  >
+                    Sí, marcar todos
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </>
+
         )}
       </div>
     </main>
