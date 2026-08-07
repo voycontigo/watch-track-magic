@@ -2,7 +2,7 @@ import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, Loader2, Trash2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,6 +12,17 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 import { getSeries } from "@/lib/tmdb.functions";
 import {
   applyEpisodeCount,
@@ -50,7 +61,28 @@ const STATUS_LABEL: Record<ShowStatus, string> = {
   finished: "Finalizada",
 };
 
+function getPreviousEpisodeKeys(
+  seasons: Array<{ seasonNumber: number; episodes: Array<{ episodeNumber: number }> }>,
+  targetSeason: number,
+  targetEpisode: number,
+  watched: Set<string>,
+): string[] {
+  const keys: string[] = [];
+  for (const season of seasons) {
+    for (const episode of season.episodes) {
+      const isBefore =
+        season.seasonNumber < targetSeason ||
+        (season.seasonNumber === targetSeason && episode.episodeNumber < targetEpisode);
+      if (!isBefore) continue;
+      const key = epKey(season.seasonNumber, episode.episodeNumber);
+      if (!watched.has(key)) keys.push(key);
+    }
+  }
+  return keys;
+}
+
 function SeriePage() {
+
   const { id } = useParams({ from: "/serie/$id" });
   const showId = Number(id);
   const fetchSeries = useServerFn(getSeries);
@@ -70,9 +102,24 @@ function SeriePage() {
     }
   }, [data, showId]);
 
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    targetKey: string;
+    targetLabel: string;
+    missingCount: number;
+    missingKeys: string[];
+  }>({
+    open: false,
+    targetKey: "",
+    targetLabel: "",
+    missingCount: 0,
+    missingKeys: [],
+  });
+
   const watched = new Set(tracked?.watched ?? []);
   const total = data?.totalEpisodes ?? tracked?.totalEpisodes ?? 0;
   const pct = total > 0 ? Math.round((watched.size / total) * 100) : 0;
+
 
   return (
     <main className="min-h-screen app-glow pb-24">
@@ -204,8 +251,13 @@ function SeriePage() {
                               <label className="flex items-center gap-3 rounded-lg px-2 py-2 active:bg-secondary">
                                 <Checkbox
                                   checked={watched.has(key)}
-                                  onCheckedChange={() => {
-                                    if (!tracked)
+                                  onCheckedChange={(nextChecked) => {
+                                    const checked = nextChecked === true;
+                                    if (!checked) {
+                                      toggleEpisode(showId, key, data.totalEpisodes);
+                                      return;
+                                    }
+                                    if (!tracked) {
                                       upsertShow({
                                         id: data.id,
                                         name: data.name,
@@ -214,7 +266,24 @@ function SeriePage() {
                                         status: "watching",
                                         totalEpisodes: data.totalEpisodes,
                                       });
-                                    toggleEpisode(showId, key, data.totalEpisodes);
+                                    }
+                                    const missingKeys = getPreviousEpisodeKeys(
+                                      data.seasons,
+                                      season.seasonNumber,
+                                      ep.episodeNumber,
+                                      watched,
+                                    );
+                                    if (missingKeys.length > 0) {
+                                      setConfirmDialog({
+                                        open: true,
+                                        targetKey: key,
+                                        targetLabel: `${season.seasonNumber}x${String(ep.episodeNumber).padStart(2, "0")} ${ep.name}`,
+                                        missingCount: missingKeys.length,
+                                        missingKeys,
+                                      });
+                                    } else {
+                                      toggleEpisode(showId, key, data.totalEpisodes);
+                                    }
                                   }}
                                 />
                                 <span className="min-w-0 flex-1 text-sm">
@@ -233,7 +302,47 @@ function SeriePage() {
                 );
               })}
             </Accordion>
+
+            <AlertDialog
+              open={confirmDialog.open}
+              onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Marcar capítulos anteriores?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Vas a marcar <strong>{confirmDialog.targetLabel}</strong> como visto. Hay{" "}
+                    {confirmDialog.missingCount} capítulo(s) anterior(es) sin marcar. ¿Quieres
+                    marcarlos también?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel
+                    onClick={() => {
+                      setConfirmDialog((prev) => ({ ...prev, open: false }));
+                      toggleEpisode(showId, confirmDialog.targetKey, data.totalEpisodes);
+                    }}
+                  >
+                    No, solo este
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      setConfirmDialog((prev) => ({ ...prev, open: false }));
+                      setSeasonWatched(
+                        showId,
+                        [confirmDialog.targetKey, ...confirmDialog.missingKeys],
+                        true,
+                        data.totalEpisodes,
+                      );
+                    }}
+                  >
+                    Sí, marcar todos
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </>
+
         )}
       </div>
     </main>
