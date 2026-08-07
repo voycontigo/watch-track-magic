@@ -139,13 +139,16 @@ export function setSeasonWatched(id: number, keys: string[], watchedState: boole
   );
 }
 
-/** Applies a freshly fetched episode count; reopens finished shows with new episodes. */
-export function applyEpisodeCount(id: number, totalEpisodes: number) {
+/** Applies a freshly fetched episode count; reopens finished shows with new episodes.
+ *  Returns true when the show got new episodes and moved back to "Viendo". */
+export function applyEpisodeCount(id: number, totalEpisodes: number): boolean {
+  let reopened = false;
   write(
     getSnapshot().map((s) => {
       if (s.id !== id) return s;
       const grew = totalEpisodes > s.totalEpisodes;
       const stillComplete = s.watched.length >= totalEpisodes && totalEpisodes > 0;
+      if (grew && !stillComplete && s.status === "finished") reopened = true;
       return {
         ...s,
         totalEpisodes,
@@ -155,16 +158,20 @@ export function applyEpisodeCount(id: number, totalEpisodes: number) {
       };
     }),
   );
+  return reopened;
 }
 
 export function shouldRunDailyCheck(): boolean {
   if (typeof window === "undefined") return false;
   const last = window.localStorage.getItem(CHECK_KEY);
-  const today = new Date().toISOString().slice(0, 10);
-  return last !== today;
+  if (!last) return true;
+  // Compatibilidad con el formato antiguo "YYYY-MM-DD"
+  const ts = last.length === 10 ? new Date(`${last}T00:00:00`).getTime() : Number(last);
+  if (!Number.isFinite(ts)) return true;
+  return Date.now() - ts > 6 * 60 * 60 * 1000;
 }
 
 export function markDailyCheckDone() {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(CHECK_KEY, new Date().toISOString().slice(0, 10));
+  window.localStorage.setItem(CHECK_KEY, String(Date.now()));
 }
