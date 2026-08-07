@@ -61,7 +61,28 @@ const STATUS_LABEL: Record<ShowStatus, string> = {
   finished: "Finalizada",
 };
 
+function getPreviousEpisodeKeys(
+  seasons: Array<{ seasonNumber: number; episodes: Array<{ episodeNumber: number }> }>,
+  targetSeason: number,
+  targetEpisode: number,
+  watched: Set<string>,
+): string[] {
+  const keys: string[] = [];
+  for (const season of seasons) {
+    for (const episode of season.episodes) {
+      const isBefore =
+        season.seasonNumber < targetSeason ||
+        (season.seasonNumber === targetSeason && episode.episodeNumber < targetEpisode);
+      if (!isBefore) continue;
+      const key = epKey(season.seasonNumber, episode.episodeNumber);
+      if (!watched.has(key)) keys.push(key);
+    }
+  }
+  return keys;
+}
+
 function SeriePage() {
+
   const { id } = useParams({ from: "/serie/$id" });
   const showId = Number(id);
   const fetchSeries = useServerFn(getSeries);
