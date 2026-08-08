@@ -181,10 +181,6 @@ function Index() {
   );
 }
 
-function AddShowDialog() {
-  return <AddShowDialogInner />;
-}
-
 function NotificationsButton({ permission }: { permission: ReturnType<typeof useNotificationPermission> }) {
   if (permission === "unsupported") return null;
   if (permission === "granted") {
@@ -221,7 +217,7 @@ function NotificationsButton({ permission }: { permission: ReturnType<typeof use
   );
 }
 
-function AddShowDialogInner() {
+function AddShowDialog() {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
   const [loading, setLoading] = useState(false);
