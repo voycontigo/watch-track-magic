@@ -18,6 +18,7 @@ export type TrackedShow = {
 
 const KEY = "seriestracker.library.v1";
 const CHECK_KEY = "seriestracker.lastDailyCheck";
+const AUTO_KEY = "seriestracker.autoStatusOnNew";
 
 let cache: TrackedShow[] = [];
 let loaded = false;
@@ -174,4 +175,37 @@ export function shouldRunDailyCheck(): boolean {
 export function markDailyCheckDone() {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CHECK_KEY, String(Date.now()));
+}
+
+/* ---- Preferencia: auto-clasificar al detectar episodios nuevos ---- */
+
+let autoCache = true;
+let autoLoaded = false;
+const autoListeners = new Set<() => void>();
+
+export function getAutoStatusOnNew(): boolean {
+  if (!autoLoaded) {
+    if (typeof window === "undefined") return true;
+    autoCache = window.localStorage.getItem(AUTO_KEY) !== "0";
+    autoLoaded = true;
+  }
+  return autoCache;
+}
+
+export function setAutoStatusOnNew(value: boolean) {
+  autoCache = value;
+  autoLoaded = true;
+  if (typeof window !== "undefined") window.localStorage.setItem(AUTO_KEY, value ? "1" : "0");
+  autoListeners.forEach((l) => l());
+}
+
+export function useAutoStatusOnNew(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      autoListeners.add(cb);
+      return () => autoListeners.delete(cb);
+    },
+    getAutoStatusOnNew,
+    () => true,
+  );
 }
