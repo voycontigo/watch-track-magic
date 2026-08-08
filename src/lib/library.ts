@@ -18,6 +18,7 @@ export type TrackedShow = {
 
 const KEY = "seriestracker.library.v1";
 const CHECK_KEY = "seriestracker.lastDailyCheck";
+const AUTO_KEY = "seriestracker.autoStatusOnNew";
 
 let cache: TrackedShow[] = [];
 let loaded = false;
@@ -140,25 +141,33 @@ export function setSeasonWatched(id: number, keys: string[], watchedState: boole
 }
 
 /** Applies a freshly fetched episode count; reopens finished shows with new episodes.
- *  Returns true when the show got new episodes and moved back to "Viendo". */
-export function applyEpisodeCount(id: number, totalEpisodes: number): boolean {
-  let reopened = false;
+ *  Con la preferencia activa, la nueva tanda se clasifica según el progreso:
+ *  sin ninguno de los antiguos pendiente → "pendiente"; a medias → "viendo".
+ *  Devuelve el nuevo estado asignado, o null si no cambió nada. */
+export function applyEpisodeCount(id: number, totalEpisodes: number): ShowStatus | null {
+  let assigned: ShowStatus | null = null;
+  const auto = getAutoStatusOnNew();
   write(
     getSnapshot().map((s) => {
       if (s.id !== id) return s;
       const grew = totalEpisodes > s.totalEpisodes;
       const stillComplete = s.watched.length >= totalEpisodes && totalEpisodes > 0;
-      if (grew && !stillComplete && s.status === "finished") reopened = true;
+      const hasNew = grew && !stillComplete;
+      // Si ya había visto todo lo anterior, la nueva tanda está "pendiente";
+      // si iba a medias, sigue "viendo".
+      const nextStatus: ShowStatus = s.watched.length >= s.totalEpisodes ? "pending" : "watching";
+      const shouldMove = hasNew && (auto ? s.status !== nextStatus : s.status === "finished");
+      if (shouldMove) assigned = auto ? nextStatus : "watching";
       return {
         ...s,
         totalEpisodes,
         lastCheckedAt: new Date().toISOString(),
-        hasNewEpisodes: grew && !stillComplete ? true : s.hasNewEpisodes && !stillComplete,
-        status: grew && !stillComplete && s.status === "finished" ? "watching" : s.status,
+        hasNewEpisodes: hasNew ? true : s.hasNewEpisodes && !stillComplete,
+        status: shouldMove ? (auto ? nextStatus : "watching") : s.status,
       };
     }),
   );
-  return reopened;
+  return assigned;
 }
 
 export function shouldRunDailyCheck(): boolean {
@@ -174,4 +183,37 @@ export function shouldRunDailyCheck(): boolean {
 export function markDailyCheckDone() {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CHECK_KEY, String(Date.now()));
+}
+
+/* ---- Preferencia: auto-clasificar al detectar episodios nuevos ---- */
+
+let autoCache = true;
+let autoLoaded = false;
+const autoListeners = new Set<() => void>();
+
+export function getAutoStatusOnNew(): boolean {
+  if (!autoLoaded) {
+    if (typeof window === "undefined") return true;
+    autoCache = window.localStorage.getItem(AUTO_KEY) !== "0";
+    autoLoaded = true;
+  }
+  return autoCache;
+}
+
+export function setAutoStatusOnNew(value: boolean) {
+  autoCache = value;
+  autoLoaded = true;
+  if (typeof window !== "undefined") window.localStorage.setItem(AUTO_KEY, value ? "1" : "0");
+  autoListeners.forEach((l) => l());
+}
+
+export function useAutoStatusOnNew(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      autoListeners.add(cb);
+      return () => autoListeners.delete(cb);
+    },
+    getAutoStatusOnNew,
+    () => true,
+  );
 }
