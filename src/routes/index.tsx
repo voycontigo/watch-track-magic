@@ -182,6 +182,46 @@ function Index() {
 }
 
 function AddShowDialog() {
+  return <AddShowDialogInner />;
+}
+
+function NotificationsButton({ permission }: { permission: ReturnType<typeof useNotificationPermission> }) {
+  if (permission === "unsupported") return null;
+  if (permission === "granted") {
+    return (
+      <span
+        className="text-muted-foreground"
+        title="Notificaciones activadas"
+        aria-label="Notificaciones activadas"
+      >
+        <Bell className="h-4 w-4 text-primary" />
+      </span>
+    );
+  }
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      className="h-8 w-8 rounded-full"
+      aria-label="Activar notificaciones de episodios nuevos"
+      title="Activar notificaciones"
+      disabled={permission === "denied"}
+      onClick={async () => {
+        const res = await requestNotificationPermission();
+        if (res === "granted") {
+          toast.success("Notificaciones activadas");
+          void notify("Notificaciones activadas", "Te avisaré cuando haya episodios nuevos.");
+        } else if (res === "denied") {
+          toast.error("Has bloqueado las notificaciones en el navegador");
+        }
+      }}
+    >
+      {permission === "denied" ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+    </Button>
+  );
+}
+
+function AddShowDialogInner() {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
   const [loading, setLoading] = useState(false);
