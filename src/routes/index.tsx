@@ -119,6 +119,7 @@ function Index() {
             <h1 className="text-lg font-semibold">Mis Series</h1>
           </div>
           <div className="flex items-center gap-3">
+            <NotificationsButton permission={notifPermission} />
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <Switch
                 checked={autoStatus}
