@@ -23,6 +23,8 @@ import {
   markDailyCheckDone,
   shouldRunDailyCheck,
   upsertShow,
+  setAutoStatusOnNew,
+  useAutoStatusOnNew,
   useLibrary,
   type ShowStatus,
 } from "@/lib/library";
@@ -56,6 +58,7 @@ const STATUS_LABEL: Record<ShowStatus, string> = {
 function Index() {
   const library = useLibrary();
   const checkCount = useServerFn(getEpisodeCount);
+  const autoStatus = useAutoStatusOnNew();
 
   useEffect(() => {
     if (!shouldRunDailyCheck()) return;
@@ -63,22 +66,21 @@ function Index() {
     if (shows.length === 0) return;
     let cancelled = false;
     (async () => {
-      const reopened: string[] = [];
+      const moved: string[] = [];
       for (const show of shows) {
         try {
           const res = await checkCount({ data: { id: show.id } });
           if (cancelled) return;
-          if (applyEpisodeCount(show.id, res.totalEpisodes)) reopened.push(show.name);
+          const next = applyEpisodeCount(show.id, res.totalEpisodes);
+          if (next) moved.push(`${show.name} → ${STATUS_LABEL[next]}`);
         } catch {
           /* ignora fallos puntuales */
         }
       }
       if (cancelled) return;
       markDailyCheckDone();
-      if (reopened.length > 0) {
-        toast.info(
-          `${reopened.join(", ")} ${reopened.length === 1 ? "tiene" : "tienen"} capítulos nuevos: ${reopened.length === 1 ? "vuelve" : "vuelven"} a “Viendo”.`,
-        );
+      if (moved.length > 0) {
+        toast.info(`Capítulos nuevos detectados: ${moved.join(", ")}`);
       }
     })();
     return () => {
@@ -102,8 +104,24 @@ function Index() {
             <Tv className="h-5 w-5 text-primary" />
             <h1 className="text-lg font-semibold">Mis Series</h1>
           </div>
-          <AddShowDialog />
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Switch
+                checked={autoStatus}
+                onCheckedChange={setAutoStatusOnNew}
+                aria-label="Clasificar automáticamente al detectar episodios nuevos"
+              />
+              <span className="hidden sm:inline">Auto-clasificar</span>
+            </label>
+            <AddShowDialog />
+          </div>
         </div>
+        {autoStatus && (
+          <p className="mx-auto max-w-3xl px-4 pb-2 text-[11px] text-muted-foreground">
+            La nueva tanda de episodios pasa a “Pendiente” si ibas al día, o a “Viendo” si la serie
+            está a medias.
+          </p>
+        )}
       </header>
 
       <div className="mx-auto max-w-3xl px-4 pt-4">
