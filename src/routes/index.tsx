@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { Loader2, Plus, Search, Tv } from "lucide-react";
+import { Bell, BellOff, Loader2, Plus, Search, Tv } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,11 @@ import {
   type ShowStatus,
 } from "@/lib/library";
 import { getEpisodeCount, searchSeries, type SearchResult } from "@/lib/tmdb.functions";
+import {
+  notify,
+  requestNotificationPermission,
+  useNotificationPermission,
+} from "@/lib/notifications";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -60,6 +65,7 @@ function Index() {
   const library = useLibrary();
   const checkCount = useServerFn(getEpisodeCount);
   const autoStatus = useAutoStatusOnNew();
+  const notifPermission = useNotificationPermission();
 
   useEffect(() => {
     if (!shouldRunDailyCheck()) return;
@@ -73,7 +79,14 @@ function Index() {
           const res = await checkCount({ data: { id: show.id } });
           if (cancelled) return;
           const next = applyEpisodeCount(show.id, res.totalEpisodes);
-          if (next) moved.push(`${show.name} → ${STATUS_LABEL[next]}`);
+          if (next) {
+            moved.push(`${show.name} → ${STATUS_LABEL[next]}`);
+            void notify(
+              `Nuevos episodios de ${show.name}`,
+              `La serie ha pasado a “${STATUS_LABEL[next]}”.`,
+              `serie-${show.id}`,
+            );
+          }
         } catch {
           /* ignora fallos puntuales */
         }
