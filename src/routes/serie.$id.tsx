@@ -119,6 +119,10 @@ function SeriePage() {
   const watched = new Set(tracked?.watched ?? []);
   const total = data?.totalEpisodes ?? tracked?.totalEpisodes ?? 0;
   const pct = total > 0 ? Math.round((watched.size / total) * 100) : 0;
+  const allEpisodeKeys =
+    data?.seasons.flatMap((season) =>
+      season.episodes.map((ep) => epKey(season.seasonNumber, ep.episodeNumber)),
+    ) ?? [];
 
 
   return (
@@ -176,7 +180,7 @@ function SeriePage() {
                   variant={tracked?.status === s ? "default" : "secondary"}
                   className="rounded-full"
                   onClick={() => {
-                    if (tracked) setStatus(showId, s);
+                    if (tracked) setStatus(showId, s, allEpisodeKeys);
                     else
                       upsertShow({
                         id: data.id,
@@ -185,6 +189,7 @@ function SeriePage() {
                         year: data.year,
                         status: s,
                         totalEpisodes: data.totalEpisodes,
+                        ...(s === "finished" ? { watched: allEpisodeKeys } : {}),
                       });
                   }}
                 >

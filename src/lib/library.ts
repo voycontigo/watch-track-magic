@@ -90,11 +90,24 @@ export function removeShow(id: number) {
   write(getSnapshot().filter((s) => s.id !== id));
 }
 
-export function setStatus(id: number, status: ShowStatus) {
+export function setStatus(id: number, status: ShowStatus, allEpisodeKeys?: string[]) {
   write(
-    getSnapshot().map((s) =>
-      s.id === id ? { ...s, status, hasNewEpisodes: status === "finished" ? false : s.hasNewEpisodes } : s,
-    ),
+    getSnapshot().map((s) => {
+      if (s.id !== id) return s;
+      // Al finalizar una serie, se marcan todos sus capítulos como vistos.
+      const watched =
+        status === "finished" && allEpisodeKeys && allEpisodeKeys.length > 0 ? allEpisodeKeys : s.watched;
+      return {
+        ...s,
+        status,
+        watched,
+        totalEpisodes:
+          status === "finished" && allEpisodeKeys && allEpisodeKeys.length > 0
+            ? allEpisodeKeys.length
+            : s.totalEpisodes,
+        hasNewEpisodes: status === "finished" ? false : s.hasNewEpisodes,
+      };
+    }),
   );
 }
 
