@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, BellOff, Loader2, Plus, Search, Tv, X } from "lucide-react";
+import { Bell, BellOff, Loader2, Plus, RefreshCw, Search, Tv, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,41 +66,70 @@ function Index() {
   const checkCount = useServerFn(getEpisodeCount);
   const autoStatus = useAutoStatusOnNew();
   const notifPermission = useNotificationPermission();
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    if (!shouldRunDailyCheck()) return;
-    const shows = getLibrary();
-    if (shows.length === 0) return;
-    let cancelled = false;
-    (async () => {
+  const runCheck = useCallback(
+    async (opts?: { manual?: boolean; isCancelled?: () => boolean }) => {
+      const shows = getLibrary();
+      if (shows.length === 0) {
+        if (opts?.manual) toast.info("Todavía no tienes series que comprobar.");
+        return;
+      }
+      if (opts?.manual) setRefreshing(true);
       const moved: string[] = [];
-      for (const show of shows) {
-        try {
-          const res = await checkCount({ data: { id: show.id } });
-          if (cancelled) return;
-          const next = applyEpisodeCount(show.id, res.totalEpisodes);
-          if (next) {
-            moved.push(`${show.name} → ${STATUS_LABEL[next]}`);
-            void notify(
-              `Nuevos episodios de ${show.name}`,
-              `La serie ha pasado a “${STATUS_LABEL[next]}”.`,
-              `serie-${show.id}`,
-            );
+      try {
+        for (const show of shows) {
+          try {
+            const res = await checkCount({ data: { id: show.id } });
+            if (opts?.isCancelled?.()) return;
+            const next = applyEpisodeCount(show.id, res.totalEpisodes);
+            if (next) {
+              moved.push(`${show.name} → ${STATUS_LABEL[next]}`);
+              void notify(
+                `Nuevos episodios de ${show.name}`,
+                `La serie ha pasado a “${STATUS_LABEL[next]}”.`,
+                `serie-${show.id}`,
+              );
+            }
+          } catch {
+            /* ignora fallos puntuales */
           }
-        } catch {
-          /* ignora fallos puntuales */
         }
+        if (opts?.isCancelled?.()) return;
+        markDailyCheckDone();
+        if (moved.length > 0) {
+          toast.info(`Capítulos nuevos detectados: ${moved.join(", ")}`);
+        } else if (opts?.manual) {
+          toast.success("Todo al día, sin episodios nuevos.");
+        }
+      } finally {
+        if (opts?.manual) setRefreshing(false);
       }
-      if (cancelled) return;
-      markDailyCheckDone();
-      if (moved.length > 0) {
-        toast.info(`Capítulos nuevos detectados: ${moved.join(", ")}`);
-      }
-    })();
+    },
+    [checkCount],
+  );
+
+  // Comprobación automática: al abrir la app y cada hora mientras siga abierta
+  // (solo lanza la petición si han pasado más de 6 h desde la última).
+  useEffect(() => {
+    let cancelled = false;
+    const isCancelled = () => cancelled;
+    const tick = () => {
+      if (!shouldRunDailyCheck()) return;
+      void runCheck({ isCancelled });
+    };
+    tick();
+    const interval = setInterval(tick, 60 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [checkCount]);
+  }, [runCheck]);
 
   const groups: Record<ShowStatus, typeof library> = {
     watching: library.filter((s) => s.status === "watching"),
@@ -120,6 +149,17 @@ function Index() {
           </div>
           <div className="flex items-center gap-3">
             <NotificationsButton permission={notifPermission} />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 rounded-full"
+              aria-label="Buscar episodios nuevos ahora"
+              title="Buscar episodios nuevos ahora"
+              disabled={refreshing}
+              onClick={() => void runCheck({ manual: true })}
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            </Button>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <Switch
                 checked={autoStatus}
