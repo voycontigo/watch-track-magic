@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
-import { Bell, BellOff, Loader2, Plus, Search, Tv } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bell, BellOff, Loader2, Plus, Search, Tv, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -221,16 +221,55 @@ function AddShowDialog() {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [typing, setTyping] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const search = useServerFn(searchSeries);
   const fetchCount = useServerFn(getEpisodeCount);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function runSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (!term.trim()) return;
+  const reset = useCallback(() => {
+    setTerm("");
+    setResults([]);
+    setLoading(false);
+    setTyping(false);
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    reset();
+  }, [open, reset]);
+
+  useEffect(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (!term.trim()) {
+      setTyping(false);
+      setResults([]);
+      return;
+    }
+    setTyping(true);
+    debounceRef.current = setTimeout(() => {
+      void runSearch(term.trim());
+    }, 400);
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+    };
+  }, [term]);
+
+  async function runSearch(query: string) {
     setLoading(true);
+    setTyping(false);
     try {
-      setResults(await search({ data: { query: term.trim() } }));
+      setResults(await search({ data: { query } }));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo buscar");
     } finally {
@@ -268,19 +307,54 @@ function AddShowDialog() {
         <DialogHeader>
           <DialogTitle>Buscar serie</DialogTitle>
         </DialogHeader>
-        <form onSubmit={runSearch} className="flex gap-2">
-          <Input
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            placeholder="Ej. Dark, Severance…"
-            autoFocus
-          />
-          <Button type="submit" size="icon" disabled={loading}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!term.trim()) return;
+            if (debounceRef.current) {
+              clearTimeout(debounceRef.current);
+              debounceRef.current = null;
+            }
+            void runSearch(term.trim());
+          }}
+          className="flex gap-2"
+        >
+          <div className="relative flex-1">
+            <Input
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              placeholder="Ej. Dark, Severance…"
+              autoFocus
+              className="pr-8"
+            />
+            {term && (
+              <button
+                type="button"
+                onClick={() => setTerm("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Limpiar búsqueda"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <Button type="submit" size="icon" disabled={loading || !term.trim()}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
           </Button>
         </form>
 
         <div className="mt-2 space-y-3">
+          {loading && results.length === 0 && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+          )}
+          {!loading && typing && (
+            <p className="py-4 text-center text-xs text-muted-foreground">Sigue escribiendo para buscar…</p>
+          )}
+          {!loading && !typing && term.trim() && results.length === 0 && (
+            <p className="py-4 text-center text-xs text-muted-foreground">No se encontraron resultados.</p>
+          )}
           {results.map((r) => (
             <div key={r.id} className="flex gap-3 rounded-xl border border-border p-2">
               <div className="h-24 w-16 shrink-0 overflow-hidden rounded-lg bg-muted">
