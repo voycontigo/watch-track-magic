@@ -1,6 +1,6 @@
 {
-  "name": "Mis Series",
-  "short_name": "Mis Series",
+  "name": "My Series",
+  "short_name": "My Series",
   "description": "Seguimiento de las series que estás viendo, pendientes y finalizadas.",
   "start_url": "/",
   "scope": "/",

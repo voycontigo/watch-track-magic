@@ -77,14 +77,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Mis Series — seguimiento de series de TV" },
+      { title: "My Series — seguimiento de series de TV" },
       {
         name: "description",
         content:
           "Organiza las series que estás viendo, las pendientes y las finalizadas, y marca cada capítulo visto.",
       },
-      { name: "theme-color", content: "#191b21" },
-      { property: "og:title", content: "Mis Series" },
+      { name: "theme-color", content: "#0e0f13" },
+      { property: "og:title", content: "My Series" },
       {
         property: "og:description",
         content: "Seguimiento de series de TV: viendo, pendientes y finalizadas.",
