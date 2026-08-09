@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
-import { Bell, BellOff, Loader2, Plus, Search, Tv } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bell, BellOff, Loader2, Plus, Search, Tv, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
