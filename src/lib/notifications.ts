@@ -31,7 +31,7 @@ export async function requestNotificationPermission(): Promise<NotifPermission> 
   return result;
 }
 
-/** Muestra una notificación del sistema (usa el service worker si está disponible). */
+/** Muestra una notificación del sistema que se cierra al pulsarla. */
 export async function notify(title: string, body: string, tag?: string) {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
@@ -39,20 +39,44 @@ export async function notify(title: string, body: string, tag?: string) {
     body,
     icon: "/icon-512.png",
     badge: "/icon-512.png",
+    requireInteraction: false,
     ...(tag ? { tag } : {}),
   };
+
+  // Preferimos la API directa: permite cerrar la notificación al hacer clic.
+  try {
+    const n = new Notification(title, options);
+    n.onclick = () => {
+      try {
+        window.focus();
+      } catch {
+        /* ignorado */
+      }
+      n.close();
+    };
+    return;
+  } catch {
+    /* fallback al service worker */
+  }
+
   try {
     const reg = await navigator.serviceWorker?.getRegistration?.();
-    if (reg) {
-      await reg.showNotification(title, options);
-      return;
-    }
-  } catch {
-    /* fallback abajo */
-  }
-  try {
-    new Notification(title, options);
+    if (reg) await reg.showNotification(title, options);
   } catch {
     /* ignorado */
   }
 }
+
+/** Cierra las notificaciones abiertas (todas o las de un tag concreto). */
+export async function closeNotifications(tag?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration?.();
+    if (!reg) return;
+    const list = await reg.getNotifications(tag ? { tag } : undefined);
+    list.forEach((n) => n.close());
+  } catch {
+    /* ignorado */
+  }
+}
+
