@@ -230,3 +230,11 @@ export function useAutoStatusOnNew(): boolean {
     () => true,
   );
 }
+/** Marca como leído el aviso de capítulos nuevos (todas o una serie concreta). */
+export function acknowledgeNewEpisodes(id?: number) {
+  write(
+    getSnapshot().map((s) =>
+      id === undefined || s.id === id ? { ...s, hasNewEpisodes: false } : s,
+    ),
+  );
+}
