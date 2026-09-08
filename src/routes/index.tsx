@@ -172,12 +172,6 @@ function Index() {
             <AddShowDialog />
           </div>
         </div>
-        {autoStatus && (
-          <p className="mx-auto max-w-3xl px-4 pb-2 text-[11px] text-muted-foreground">
-            La nueva tanda de episodios pasa a “Pendiente” si ibas al día, o a “Viendo” si la serie
-            está a medias.
-          </p>
-        )}
       </header>
 
       <div className="mx-auto max-w-3xl px-4 pt-4">
