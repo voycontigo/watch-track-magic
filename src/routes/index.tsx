@@ -181,13 +181,19 @@ function Index() {
 
       <div className="mx-auto max-w-3xl px-4 pt-4">
         {withNew.length > 0 && (
-          <div className="mb-4 rounded-2xl border border-primary/40 bg-primary/10 p-3 text-sm">
+          <button
+            type="button"
+            onClick={() => acknowledgeNewEpisodes()}
+            aria-label="Descartar aviso de capítulos nuevos"
+            className="mb-4 w-full rounded-2xl border border-primary/40 bg-primary/10 p-3 text-left text-sm transition hover:bg-primary/15"
+          >
             <p className="font-medium text-primary">Hay capítulos nuevos</p>
             <p className="text-muted-foreground">
               {withNew.map((s) => s.name).join(", ")} han estrenado episodios y vuelven a estar
               incompletas.
             </p>
-          </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">Toca para descartar este aviso.</p>
+          </button>
         )}
 
         <Tabs defaultValue="watching">
