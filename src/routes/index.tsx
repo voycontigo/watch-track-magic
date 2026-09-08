@@ -19,6 +19,7 @@ import { toast } from "sonner";
 
 import { ShowCard } from "@/components/ShowCard";
 import {
+  acknowledgeNewEpisodes,
   applyEpisodeCount,
   getLibrary,
   markDailyCheckDone,
