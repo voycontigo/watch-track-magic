@@ -1,7 +1,7 @@
 name: "My Series"
 slug: "my_series"
 description: "Seguimiento de series de TV para Home Assistant con PostgreSQL y TMDB"
-version: "1.0.0"
+version: "1.0.1"
 startup: "services"
 boot: "auto"
 init: false
@@ -15,6 +15,10 @@ ingress: true
 ingress_port: 3000
 panel_icon: "mdi:television-classic"
 panel_title: "My Series"
+ports:
+  3000/tcp: 3000
+ports_description:
+  3000/tcp: "Interfaz Web directa"
 options:
   postgres_host: "localhost"
   postgres_port: 5432
