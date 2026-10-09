@@ -16,9 +16,9 @@ ingress_port: 3000
 panel_icon: "mdi:television-classic"
 panel_title: "My Series"
 ports:
-  3000/tcp: 3000
+  3000/tcp: 3001
 ports_description:
-  3000/tcp: "Interfaz Web directa"
+  3000/tcp: "Interfaz Web directa (host 3001)"
 options:
   postgres_host: "localhost"
   postgres_port: 5432
