@@ -14,8 +14,8 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Instalar bash, jq, utilidades de postgresql y su-exec
-RUN apk add --no-cache bash jq postgresql postgresql-contrib postgresql-client su-exec
+# Instalar bash y jq (para leer options.json de Home Assistant)
+RUN apk add --no-cache bash jq
 
 COPY package.json ./
 RUN npm install --omit=dev

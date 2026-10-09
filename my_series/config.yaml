@@ -1,7 +1,7 @@
 name: "My Series"
 slug: "my_series"
-description: "Seguimiento de series de TV para Home Assistant con PostgreSQL y TMDB"
-version: "1.0.1"
+description: "Seguimiento de series de TV para Home Assistant. Requiere el add-on PostgreSQL instalado."
+version: "1.0.2"
 startup: "services"
 boot: "auto"
 init: false
@@ -20,10 +20,10 @@ ports:
 ports_description:
   3000/tcp: "Interfaz Web directa (host 3001)"
 options:
-  postgres_host: "localhost"
+  postgres_host: "homeassistant"
   postgres_port: 5432
   postgres_user: "postgres"
-  postgres_password: "seriespassword"
+  postgres_password: ""
   postgres_database: "series_tracker"
   tmdb_api_key: ""
 schema:
