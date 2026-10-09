@@ -1,6 +1,6 @@
 name: "My Series"
 slug: "my_series"
-description: "Seguimiento de series de TV para Home Assistant con base de datos PostgreSQL y sincronización con TMDB"
+description: "Seguimiento de series de TV para Home Assistant con PostgreSQL y TMDB"
 version: "1.0.0"
 startup: "services"
 boot: "auto"
@@ -15,13 +15,6 @@ ingress: true
 ingress_port: 3000
 panel_icon: "mdi:television-classic"
 panel_title: "My Series"
-homeassistant_api: false
-ports:
-  3000/tcp: null
-ports_description:
-  3000/tcp: "Puerto web directo opcional (dejar vacío si usas Ingress)"
-map:
-  - "data:rw"
 options:
   postgres_host: "localhost"
   postgres_port: 5432
@@ -35,4 +28,4 @@ schema:
   postgres_user: str
   postgres_password: password
   postgres_database: str
-  tmdb_api_key: str?
+  tmdb_api_key: str
