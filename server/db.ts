@@ -84,9 +84,55 @@ export async function initDb(): Promise<Pool> {
   if (pool) return pool;
 
   const { poolConfig } = getDbConfig();
+  const targetDb = (poolConfig as any).database as string | undefined;
+
   console.log(
-    `Conectando a PostgreSQL (${poolConfig.host || "URL"}:${poolConfig.port || ""} / ${poolConfig.database || ""})...`,
+    `Conectando a PostgreSQL (${poolConfig.host || "URL"}:${poolConfig.port || ""} / ${targetDb || ""})...`,
   );
+
+  // ── Auto-crear la base de datos si no existe ──────────────────────────────
+  // Solo aplica cuando usamos host/port (no connectionString) y tenemos un
+  // nombre de base de datos explícito.
+  if (targetDb && !(poolConfig as any).connectionString) {
+    const adminConfig: typeof poolConfig = { ...poolConfig, database: "postgres" };
+    const adminPool = new Pool(adminConfig);
+    let adminClient;
+    let adminRetries = 10;
+    while (adminRetries > 0) {
+      try {
+        adminClient = await adminPool.connect();
+        break;
+      } catch (err: any) {
+        adminRetries--;
+        if (adminRetries === 0) {
+          await adminPool.end();
+          throw new Error(`No se pudo conectar a PostgreSQL para comprobar la BD: ${err.message}`);
+        }
+        console.warn(`Esperando PostgreSQL... reintentando en 3s (${adminRetries} intentos).`);
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    }
+    if (adminClient) {
+      try {
+        const res = await adminClient.query(
+          "SELECT 1 FROM pg_database WHERE datname = $1",
+          [targetDb],
+        );
+        if (res.rowCount === 0) {
+          console.log(`Base de datos '${targetDb}' no encontrada. Creándola...`);
+          // No se puede usar parámetros en CREATE DATABASE → escapamos el nombre
+          await adminClient.query(`CREATE DATABASE "${targetDb.replace(/"/g, '""')}"`);
+          console.log(`Base de datos '${targetDb}' creada correctamente.`);
+        } else {
+          console.log(`Base de datos '${targetDb}' ya existe.`);
+        }
+      } finally {
+        adminClient.release();
+        await adminPool.end();
+      }
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   pool = new Pool(poolConfig);
 
@@ -136,6 +182,7 @@ export async function initDb(): Promise<Pool> {
 
   return pool;
 }
+
 
 function mapRow(row: any): DbShow {
   return {
