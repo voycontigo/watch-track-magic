@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
+import { useServerFn } from "@/lib/tmdb.functions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, BellOff, Loader2, Plus, RefreshCw, Search, Tv, X } from "lucide-react";
 

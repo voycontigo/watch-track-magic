@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
+import { useServerFn } from "@/lib/tmdb.functions";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, Loader2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
