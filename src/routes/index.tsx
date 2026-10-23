@@ -28,6 +28,7 @@ import {
   setAutoStatusOnNew,
   useAutoStatusOnNew,
   useLibrary,
+  useDbStatus,
   type ShowStatus,
 } from "@/lib/library";
 import { getEpisodeCount, searchSeries, type SearchResult } from "@/lib/tmdb.functions";
@@ -64,6 +65,7 @@ const STATUS_LABEL: Record<ShowStatus, string> = {
 
 function Index() {
   const library = useLibrary();
+  const dbStatus = useDbStatus();
   const checkCount = useServerFn(getEpisodeCount);
   const autoStatus = useAutoStatusOnNew();
   const notifPermission = useNotificationPermission();
@@ -175,6 +177,13 @@ function Index() {
       </header>
 
       <div className="mx-auto max-w-3xl px-4 pt-4">
+        {!dbStatus.connected && (
+          <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+            <p className="font-semibold text-amber-400">⚠️ Modo local (Base de datos PostgreSQL desconectada)</p>
+            <p className="mt-0.5 text-amber-300/80">Los cambios solo se están guardando en este dispositivo y no se sincronizan con otros. Revisa los ajustes de PostgreSQL en el add-on My Series.</p>
+            {dbStatus.error && <p className="mt-1 font-mono text-[10px] text-amber-400/70">Detalle: {dbStatus.error}</p>}
+          </div>
+        )}
         {withNew.length > 0 && (
           <button
             type="button"
