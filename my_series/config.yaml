@@ -1,7 +1,7 @@
 name: "My Series"
 slug: "my_series"
 description: "Seguimiento de series de TV para Home Assistant. Requiere el add-on PostgreSQL instalado."
-version: "1.0.3"
+version: "1.0.4"
 startup: "services"
 boot: "auto"
 init: false

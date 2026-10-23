@@ -24,8 +24,10 @@ let cache: TrackedShow[] = [];
 let loaded = false;
 let isSyncing = false;
 let lastSyncTimestamp = 0;
-let dbConnected = true;
-let lastDbError: string | null = null;
+let dbStatusSnapshot: { connected: boolean; error: string | null } = {
+  connected: true,
+  error: null,
+};
 const listeners = new Set<() => void>();
 const dbListeners = new Set<() => void>();
 
@@ -35,8 +37,8 @@ export function useDbStatus(): { connected: boolean; error: string | null } {
       dbListeners.add(cb);
       return () => dbListeners.delete(cb);
     },
-    () => ({ connected: dbConnected, error: lastDbError }),
-    () => ({ connected: true, error: null }),
+    () => dbStatusSnapshot,
+    () => dbStatusSnapshot,
   );
 }
 
@@ -55,9 +57,8 @@ function emit() {
 }
 
 function notifyDbChange(connected: boolean, error: string | null = null) {
-  if (dbConnected !== connected || lastDbError !== error) {
-    dbConnected = connected;
-    lastDbError = error;
+  if (dbStatusSnapshot.connected !== connected || dbStatusSnapshot.error !== error) {
+    dbStatusSnapshot = { connected, error };
     dbListeners.forEach((l) => l());
   }
 }
