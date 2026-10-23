@@ -1,4 +1,5 @@
 import fs from "fs";
+import net from "net";
 import { Pool, type PoolConfig } from "pg";
 
 export type ShowStatus = "watching" | "pending" | "finished";
@@ -17,6 +18,64 @@ export type DbShow = {
 };
 
 let pool: Pool | null = null;
+let activeHost: string | null = null;
+let lastDbError: string | null = null;
+
+export function getDbStatus(): {
+  connected: boolean;
+  activeHost: string | null;
+  database: string;
+  error: string | null;
+} {
+  return {
+    connected: pool !== null && lastDbError === null,
+    activeHost,
+    database: "series_tracker",
+    error: lastDbError,
+  };
+}
+
+/** Comprueba rápidamente si un puerto TCP está abierto en un host con timeout corto */
+function testTcpPort(host: string, port: number, timeoutMs = 2000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("timeout", () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once("error", () => {
+      socket.destroy();
+      resolve(false);
+    });
+    try {
+      socket.connect(port, host);
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+/** Devuelve la lista de hosts candidatos a probar en orden de prioridad */
+function getCandidateHosts(configuredHost?: string): string[] {
+  const hosts: string[] = [];
+  if (configuredHost && configuredHost.trim()) {
+    hosts.push(configuredHost.trim());
+  }
+  // Pasarela Docker estándar en Home Assistant Supervisor para acceder a puertos expuestos en el host
+  if (!hosts.includes("172.30.32.1")) hosts.push("172.30.32.1");
+  // IP LAN común del host MiniPC
+  if (!hosts.includes("192.168.1.40")) hosts.push("192.168.1.40");
+  if (!hosts.includes("host.docker.internal")) hosts.push("host.docker.internal");
+  if (!hosts.includes("homeassistant")) hosts.push("homeassistant");
+  if (!hosts.includes("localhost")) hosts.push("localhost");
+  if (!hosts.includes("127.0.0.1")) hosts.push("127.0.0.1");
+  return hosts;
+}
 
 export function getDbConfig(): { poolConfig: PoolConfig; tmdbApiKey: string } {
   let haOptions: Record<string, any> = {};
@@ -24,10 +83,10 @@ export function getDbConfig(): { poolConfig: PoolConfig; tmdbApiKey: string } {
     if (fs.existsSync("/data/options.json")) {
       const content = fs.readFileSync("/data/options.json", "utf8");
       haOptions = JSON.parse(content);
-      console.log("Opciones de Home Assistant cargadas desde /data/options.json");
+      console.log("[DB] Opciones de Home Assistant cargadas desde /data/options.json");
     }
   } catch (err) {
-    console.warn("No se pudo leer /data/options.json:", err);
+    console.warn("[DB] No se pudo leer /data/options.json:", err);
   }
 
   const databaseUrl = process.env.DATABASE_URL || haOptions.postgres_url;
@@ -46,7 +105,7 @@ export function getDbConfig(): { poolConfig: PoolConfig; tmdbApiKey: string } {
   const host =
     process.env.POSTGRES_HOST ||
     haOptions.postgres_host ||
-    "localhost";
+    "172.30.32.1";
   const port = Number(
     process.env.POSTGRES_PORT ||
       haOptions.postgres_port ||
@@ -59,7 +118,7 @@ export function getDbConfig(): { poolConfig: PoolConfig; tmdbApiKey: string } {
   const password = String(
     process.env.POSTGRES_PASSWORD ??
       haOptions.postgres_password ??
-      "postgres",
+      "homeassistant",
   );
   const database =
     process.env.POSTGRES_DB ||
@@ -84,58 +143,106 @@ export async function initDb(): Promise<Pool> {
   if (pool) return pool;
 
   const { poolConfig } = getDbConfig();
-  console.log(
-    `Conectando a PostgreSQL (${poolConfig.host || "URL"}:${poolConfig.port || ""} / ${poolConfig.database || ""})...`,
-  );
+  const targetDb = (poolConfig as any).database as string | undefined;
+  const configuredHost = (poolConfig as any).host as string;
+  const port = Number((poolConfig as any).port || 5432);
 
-  pool = new Pool(poolConfig);
-
-  // Intentar conectar con reintentos
-  let retries = 10;
-  while (retries > 0) {
-    try {
-      const client = await pool.connect();
-      console.log("Conexión con PostgreSQL establecida correctamente.");
-
-      // Inicializar tablas
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS shows (
-          id INTEGER PRIMARY KEY,
-          name TEXT NOT NULL,
-          poster TEXT,
-          year TEXT,
-          status VARCHAR(20) NOT NULL DEFAULT 'watching',
-          watched JSONB NOT NULL DEFAULT '[]'::jsonb,
-          total_episodes INTEGER NOT NULL DEFAULT 0,
-          has_new_episodes BOOLEAN NOT NULL DEFAULT FALSE,
-          last_checked_at TIMESTAMPTZ,
-          added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-
-        CREATE TABLE IF NOT EXISTS settings (
-          key VARCHAR(100) PRIMARY KEY,
-          value TEXT NOT NULL
-        );
-      `);
-
-      client.release();
-      break;
-    } catch (err: any) {
-      retries--;
-      const msg = err.message || err.code || String(err);
-      console.warn(
-        `Aviso al conectar a PostgreSQL: ${msg}. Reintentando en 3s (${retries} intentos restantes)...`,
-      );
-      if (retries === 0) {
-        throw new Error(`No se pudo conectar a PostgreSQL tras varios intentos: ${msg}`);
+  // 1. Detectar el host funcional si no usamos connectionString
+  let resolvedHost = configuredHost;
+  if (!(poolConfig as any).connectionString) {
+    const candidates = getCandidateHosts(configuredHost);
+    console.log(`[DB] Buscando servidor PostgreSQL en candidatos: ${candidates.join(", ")} (puerto ${port})...`);
+    
+    let found = false;
+    for (const cand of candidates) {
+      const ok = await testTcpPort(cand, port, 1500);
+      if (ok) {
+        resolvedHost = cand;
+        console.log(`[DB] ¡Servidor PostgreSQL encontrado y accesible en: ${cand}:${port}!`);
+        found = true;
+        break;
+      } else {
+        console.log(`[DB] Candidato ${cand}:${port} no responde.`);
       }
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+
+    if (!found) {
+      console.warn(`[DB] Ningún candidato respondió en el puerto ${port}. Usando configurado: ${configuredHost}`);
     }
   }
 
-  return pool;
+  (poolConfig as any).host = resolvedHost;
+  activeHost = resolvedHost;
+
+  console.log(
+    `[DB] Conectando a PostgreSQL (${resolvedHost}:${port} / BD: ${targetDb || ""})...`,
+  );
+
+  // 2. Auto-crear la base de datos si no existe (conectando a la BD por defecto 'postgres')
+  if (targetDb && !(poolConfig as any).connectionString) {
+    const adminConfig: typeof poolConfig = { ...poolConfig, database: "postgres" };
+    const adminPool = new Pool(adminConfig);
+    let adminClient;
+    try {
+      adminClient = await adminPool.connect();
+      const res = await adminClient.query(
+        "SELECT 1 FROM pg_database WHERE datname = $1",
+        [targetDb],
+      );
+      if (res.rowCount === 0) {
+        console.log(`[DB] Base de datos '${targetDb}' no existe. Creándola automáticamente...`);
+        await adminClient.query(`CREATE DATABASE "${targetDb.replace(/"/g, '""')}"`);
+        console.log(`[DB] Base de datos '${targetDb}' creada correctamente.`);
+      } else {
+        console.log(`[DB] Base de datos '${targetDb}' ya existe.`);
+      }
+    } catch (err: any) {
+      console.warn(`[DB] Nota al comprobar/crear base de datos '${targetDb}':`, err.message);
+    } finally {
+      if (adminClient) adminClient.release();
+      await adminPool.end().catch(() => {});
+    }
+  }
+
+  // 3. Conectar a la base de datos de la aplicación y crear tablas
+  const appPool = new Pool(poolConfig);
+  try {
+    const client = await appPool.connect();
+    console.log("[DB] Conexión principal con PostgreSQL establecida con éxito.");
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS shows (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        poster TEXT,
+        year TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'watching',
+        watched JSONB NOT NULL DEFAULT '[]'::jsonb,
+        total_episodes INTEGER NOT NULL DEFAULT 0,
+        has_new_episodes BOOLEAN NOT NULL DEFAULT FALSE,
+        last_checked_at TIMESTAMPTZ,
+        added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS settings (
+        key VARCHAR(100) PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+
+    client.release();
+    pool = appPool;
+    lastDbError = null;
+    return pool;
+  } catch (err: any) {
+    lastDbError = err.message || String(err);
+    console.error("[DB] Error conectando a PostgreSQL:", lastDbError);
+    await appPool.end().catch(() => {});
+    throw err;
+  }
 }
+
 
 function mapRow(row: any): DbShow {
   return {

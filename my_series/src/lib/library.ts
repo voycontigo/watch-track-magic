@@ -22,8 +22,23 @@ const AUTO_KEY = "seriestracker.autoStatusOnNew";
 
 let cache: TrackedShow[] = [];
 let loaded = false;
-let dbSynced = false;
+let isSyncing = false;
+let lastSyncTimestamp = 0;
+let dbConnected = true;
+let lastDbError: string | null = null;
 const listeners = new Set<() => void>();
+const dbListeners = new Set<() => void>();
+
+export function useDbStatus(): { connected: boolean; error: string | null } {
+  return useSyncExternalStore(
+    (cb) => {
+      dbListeners.add(cb);
+      return () => dbListeners.delete(cb);
+    },
+    () => ({ connected: dbConnected, error: lastDbError }),
+    () => ({ connected: true, error: null }),
+  );
+}
 
 function readLocal(): TrackedShow[] {
   if (typeof window === "undefined") return [];
@@ -39,6 +54,14 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
+function notifyDbChange(connected: boolean, error: string | null = null) {
+  if (dbConnected !== connected || lastDbError !== error) {
+    dbConnected = connected;
+    lastDbError = error;
+    dbListeners.forEach((l) => l());
+  }
+}
+
 function write(next: TrackedShow[]) {
   cache = next;
   loaded = true;
@@ -48,18 +71,29 @@ function write(next: TrackedShow[]) {
   emit();
 }
 
-/** Sincroniza en segundo plano con PostgreSQL */
-async function syncWithPostgres() {
-  if (typeof window === "undefined" || dbSynced) return;
-  dbSynced = true;
+/** Sincroniza en segundo plano con la base de datos central PostgreSQL en el servidor */
+export async function syncWithPostgres(force = false) {
+  if (typeof window === "undefined") return;
+  if (isSyncing) return;
+  if (!force && Date.now() - lastSyncTimestamp < 4000) return;
+
+  isSyncing = true;
   try {
     const res = await fetch("./api/shows");
-    if (!res.ok) return;
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      notifyDbChange(false, `Error del servidor (${res.status}): ${errText || res.statusText}`);
+      return;
+    }
+
     const dbShows: TrackedShow[] = await res.json();
+    notifyDbChange(true, null);
 
     const localShows = readLocal();
+
+    // 1. Si la base de datos central está vacía pero este dispositivo tiene series locales,
+    // subirlas a PostgreSQL para que el resto de la LAN las tenga.
     if (dbShows.length === 0 && localShows.length > 0) {
-      // Migrar datos de localStorage a PostgreSQL automáticamente
       await fetch("./api/shows/batch-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,8 +101,29 @@ async function syncWithPostgres() {
       });
       write(localShows);
     } else {
-      write(dbShows);
+      // 2. Si hay series locales que aún no existen en la BD (ej. añadidas sin conexión), subirlas
+      const dbIds = new Set(dbShows.map((s) => s.id));
+      const missingLocal = localShows.filter((s) => !dbIds.has(s.id));
+      if (missingLocal.length > 0) {
+        await fetch("./api/shows/batch-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shows: missingLocal }),
+        });
+        const refreshedRes = await fetch("./api/shows");
+        if (refreshedRes.ok) {
+          const allShows = await refreshedRes.json();
+          write(allShows);
+        } else {
+          write(dbShows);
+        }
+      } else {
+        // Fuente de verdad: la base de datos PostgreSQL compartida
+        write(dbShows);
+      }
     }
+
+    lastSyncTimestamp = Date.now();
 
     // Sincronizar ajustes
     const settingsRes = await fetch("./api/settings");
@@ -83,9 +138,25 @@ async function syncWithPostgres() {
         window.localStorage.setItem(CHECK_KEY, String(settings.lastDailyCheck));
       }
     }
-  } catch (e) {
-    console.warn("No se pudo conectar a la API de PostgreSQL, usando almacenamiento local:", e);
+  } catch (e: any) {
+    notifyDbChange(false, e?.message || "No se pudo contactar con el servidor central");
+    console.warn("No se pudo conectar a PostgreSQL, usando caché local:", e);
+  } finally {
+    isSyncing = false;
   }
+}
+
+// Escuchar cambios de visibilidad y enfocado para sincronizar al instante entre dispositivos
+if (typeof window !== "undefined") {
+  window.addEventListener("visibilitychange", () => {
+    if (!document.hidden) void syncWithPostgres(true);
+  });
+  window.addEventListener("focus", () => void syncWithPostgres(true));
+
+  // Polling automático cada 10s cuando la pantalla está activa
+  setInterval(() => {
+    if (!document.hidden) void syncWithPostgres(true);
+  }, 10000);
 }
 
 function getSnapshot(): TrackedShow[] {

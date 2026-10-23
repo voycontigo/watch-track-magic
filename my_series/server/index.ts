@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import {
   initDb,
+  getDbStatus,
   getAllShows,
   upsertShow,
   deleteShow,
@@ -40,13 +41,19 @@ app.get("/api/health", async (_req, res) => {
   try {
     await initDb();
     const hasKey = Boolean(await getTmdbApiKey());
+    const dbStatus = getDbStatus();
     res.json({
       status: "ok",
-      database: "connected",
+      database: dbStatus,
       tmdbConfigured: hasKey,
     });
   } catch (err: any) {
-    res.status(500).json({ status: "error", error: err.message });
+    const dbStatus = getDbStatus();
+    res.status(200).json({
+      status: "degraded",
+      database: { ...dbStatus, connected: false, error: err.message },
+      tmdbConfigured: false,
+    });
   }
 });
 
@@ -239,16 +246,18 @@ app.get("*", (req, res) => {
 
   let html = fs.readFileSync(indexPath, "utf8");
 
-  // Si Home Assistant envía el header X-Ingress-Path, inyectar <base>
+  // Si Home Assistant envía el header X-Ingress-Path, inyectar base correspondiente.
+  // Si es acceso directo (móvil, tablet, etc.), asegurar base href="/" para que
+  // rutas hijas (/serie/:id) resuelvan siempre ./api/... a /api/...
   const ingressPath = req.headers["x-ingress-path"] as string;
-  if (ingressPath) {
-    const normalized = ingressPath.endsWith("/") ? ingressPath : `${ingressPath}/`;
-    // Inyectar o reemplazar etiqueta <base>
-    if (html.includes("<base ")) {
-      html = html.replace(/<base [^>]*>/i, `<base href="${normalized}">`);
-    } else {
-      html = html.replace("<head>", `<head>\n    <base href="${normalized}">`);
-    }
+  const basePath = ingressPath
+    ? (ingressPath.endsWith("/") ? ingressPath : `${ingressPath}/`)
+    : "/";
+
+  if (html.includes("<base ")) {
+    html = html.replace(/<base [^>]*>/i, `<base href="${basePath}">`);
+  } else {
+    html = html.replace("<head>", `<head>\n    <base href="${basePath}">`);
   }
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
